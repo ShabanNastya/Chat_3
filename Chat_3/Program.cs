@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -15,7 +15,7 @@ namespace Chat_3
         private static bool isDelivered = false;
         private static uint counter = 0;
 
-        static void Main(string[] args)
+        static void Main()
         {
             Console.Write("Enter the port to receive messages: ");
             int localPort = Int32.Parse(Console.ReadLine());
@@ -28,11 +28,7 @@ namespace Chat_3
                 EndPoint remotePoint = new IPEndPoint(IPAddress.Parse(serverIp), remotePort);
                 IPEndPoint localIP = new IPEndPoint(IPAddress.Parse(serverIp), localPort);
                 mainSocket.Bind(localIP);
-                while (!isConnecting)
-                {
-                    Connect(remotePoint); 
-                    Thread.Sleep(300);
-                }
+                Connect(remotePoint);
 
                 Task listeningTask = new Task(Listen);
                 listeningTask.Start();
@@ -56,34 +52,32 @@ namespace Chat_3
             while (isDelivered)
             {
                 mainSocket.SendTo(data, remotePoint);
-                Thread.Sleep(300);
             }
         }
 
         private static void Connect(EndPoint remotePoint)
         {
-            try
+            byte[] data = Encoding.Unicode.GetBytes("connect");
+            byte[] buffer = new byte[data.Length];
+            var recieveArgs = new SocketAsyncEventArgs() { RemoteEndPoint = remotePoint };
+            recieveArgs.SetBuffer(buffer, 0, buffer.Length);
+            while (!isConnecting)
             {
-                mainSocket.SendTo(Encoding.Unicode.GetBytes("connect"), remotePoint);
-                StringBuilder builder = new StringBuilder();
-                int bytes = 0;
-                byte[] data = new byte[256];
-                EndPoint remoteIp = new IPEndPoint(IPAddress.Any, 0);
-                do
+                try
                 {
-                    bytes = mainSocket.ReceiveFrom(data, ref remoteIp);
-                    builder.Append(Encoding.Unicode.GetString(data, 0, bytes));
+                    mainSocket.SendTo(data, remotePoint);
+                    mainSocket.ReceiveAsync(recieveArgs);
+                    if (Encoding.UTF8.GetString(buffer).Equals(Encoding.UTF8.GetString(Encoding.Unicode.GetBytes("connect"))))
+                    {
+                        mainSocket.SendTo(data, remotePoint);
+                        isConnecting = true;
+                        Console.WriteLine("Connection established");
+                    }
                 }
-                while (mainSocket.Available > 0);
-                IPEndPoint remoteFullIp = remoteIp as IPEndPoint;
-                if (builder.ToString().Equals("connect"))
-                {
-                    isConnecting = true;
+                catch (Exception e)
+                { 
                 }
-
-                Console.WriteLine("Connection established");
             }
-            catch {}
         }
 
 
@@ -108,7 +102,12 @@ namespace Chat_3
                     var message = builder.ToString().Split('|');
                     if (message.Length == 1)
                     {
-                        if (Int32.Parse(message[0]) == counter)
+                        if (message[0] == "connect")
+                        {
+                            isConnecting = true;
+                            Console.WriteLine("Connection established");
+                        }
+                        else if (Int32.Parse(message[0]) == counter)
                         {
                             isDelivered = false;
                         }
